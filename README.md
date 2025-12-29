@@ -122,6 +122,7 @@ IAM_ROLE_ARN: arn:aws:iam::123456789:role/php-health-app-production-gh-actions-r
 
 ## ✅ Verification
 Terraform automatically updates the AWS Domain Name Servers. Wait ~15 minutes for DNS propagation, then verify the live environment.
+
 **1. HTTPS & SSL:**
 ```bash
 curl -v $(terraform -chdir=terraform/environments/production output -raw health_check_url)
