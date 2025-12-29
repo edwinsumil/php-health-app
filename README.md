@@ -67,7 +67,7 @@ How to deploy the application to production using the included scripts.
 
 **0. Prerequisites (One-Time Setup)**
 
-1. Domain Name Purchase (Manual Step):
+1. Domain Name Purchase (Manual Step): Assumptions to support a production-like application with domain exposure and SSL/TLS handshake
 ```text
 Log in to the AWS Console and go to Route 53.
 Click Domains -> Registered domains -> Register Domain.
@@ -77,7 +77,7 @@ Wait until the domain status is "Active" (approx. 15-30 mins).
 2. AWS Credentials: Ensure aws configure is active.
 3. State Backend: Create S3 Bucket and DynamoDB table for Terraform state.
 ```bash
-aws s3api create-bucket --bucket platinumlist-tf-state-bucket --region us-west-2
+aws s3api create-bucket --bucket plist-tf-state-bucket --region us-west-2
 aws dynamodb create-table \
     --table-name terraform-state-lock \
     --attribute-definitions AttributeName=LockID,AttributeType=S \
@@ -85,20 +85,19 @@ aws dynamodb create-table \
     --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1 \
     --region us-west-2
 ```
-3. Permissions: Make scripts executable.
+4. AWS ECR Repository: To store application docker image
+```bash
+aws ecr create-repository --repository-name php-health-app-production --region us-west-2
+```
+5. Permissions: Make scripts executable.
 ```bash
 chmod +x scripts/*.sh
 ```
 
 **1. Bootstrap (Build & Push Image)**
 
-Terraform expects a Docker image to exist before starting the ECS Service.
-Note: For the very first run, we manually create the repo, then use the script.
+Use the bootstrap script to build and push application docker image to AWS ECR Repository
 ```bash
-# 1. Create Repo (One time only)
-aws ecr create-repository --repository-name php-health-app-production --region us-west-2
-
-# 2. Build and Push Image
 ./scripts/build_push.sh production
 ```
 

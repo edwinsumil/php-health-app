@@ -46,14 +46,14 @@ terraform/
 **1. Prerequisites (One-Time Setup)**
 Before running Terraform, we need an S3 Bucket and DynamoDB table for state management. Run these AWS CLI commands once:
 ```bash
-# 1. Domain Name Purchase (Manual Step)
+# 1. Domain Name Purchase (Manual Step) : Assumptions to support a production-like application with domain exposure and SSL/TLS handshake
 Log in to the AWS Console and go to Route 53.
 Click Domains -> Registered domains -> Register Domain.
 Purchase the domain (e.g., plist.com) in the same AWS account we are deploying to.
 Wait until the domain status is "Active" (approx. 15-30 mins).
 
 # 2. Create S3 Bucket
-aws s3api create-bucket --bucket platinumlist-tf-state-bucket--region us-west-2
+aws s3api create-bucket --bucket plist-tf-state-bucket--region us-west-2
 
 # 3. Create DynamoDB Lock Table
 aws dynamodb create-table \
