@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------------
-# 1. Request a NEW ACM Certificate
+# Request a NEW ACM Certificate
 # ------------------------------------------------------------------------------
 resource "aws_acm_certificate" "main" {
   domain_name       = var.app_domain_name
@@ -16,7 +16,7 @@ resource "aws_acm_certificate" "main" {
 }
 
 # ------------------------------------------------------------------------------
-# 2. Create DNS Records for Validation
+# Create DNS Records for Validation
 # We reference the Zone ID from dns.tf to create the CNAME records
 # ------------------------------------------------------------------------------
 resource "aws_route53_record" "cert_validation" {
@@ -35,8 +35,8 @@ resource "aws_route53_record" "cert_validation" {
 }
 
 # ------------------------------------------------------------------------------
-# 3. Validate the Certificate
-# Pauses Terraform apply until AWS confirms the Domain ownership(~2 to 5 minutes.)
+# Validate the Certificate
+# Pauses Terraform apply until AWS confirms the Domain ownership (~2 to 5 minutes.)
 # ------------------------------------------------------------------------------
 resource "aws_acm_certificate_validation" "main" {
   certificate_arn         = aws_acm_certificate.main.arn
