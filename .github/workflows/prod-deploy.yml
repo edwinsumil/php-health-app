@@ -1,0 +1,140 @@
+name: CI/CD Pipeline (OIDC)
+
+# ------------------------------------------------------------------
+# TRIGGER
+# Run this workflow only when code is pushed to the main branch.
+# ------------------------------------------------------------------
+on:
+  push:
+    branches: [ main ]
+
+# ------------------------------------------------------------------
+# PERMISSIONS
+# 'id-token: write' is mandatory for AWS OIDC authentication.
+# 'contents: read' is required to checkout the code.
+# ------------------------------------------------------------------
+permissions:
+  id-token: write
+  contents: read
+
+# ------------------------------------------------------------------
+# ENVIRONMENT VARIABLES
+# Centralized configuration for the pipeline.
+# ------------------------------------------------------------------
+env:
+  AWS_REGION: us-west-2
+  ECR_REPO_NAME: php-health-app-production
+  ECS_CLUSTER: php-health-app-production-cluster
+  ECS_SERVICE: php-health-app-production-service
+  # The ARN of the IAM Role created by Terraform (modules/github-oidc)
+  IAM_ROLE_ARN: arn:aws:iam::123456789012:role/php-health-app-production-gh-actions-role
+  # Path to the application source code (Dockerfile location)
+  DOCKER_PATH: ./php-app 
+  # Path to the Terraform Production Environment
+  TF_WORKING_DIR: ./terraform/environments/production
+
+jobs:
+  deploy:
+    name: Build, Deploy & Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      # ----------------------------------------------------------------
+      # 1. SETUP & AUTH
+      # ----------------------------------------------------------------
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ----------------------------------------------------------------
+      # 2. BUILD & PUSH
+      # Uses the bash script to handle Docker logic.
+      # ----------------------------------------------------------------
+      - name: Build & Push Image
+        run: |
+          chmod +x ./scripts/build_push.sh
+          ./scripts/build_push.sh
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+
+      # ----------------------------------------------------------------
+      # 3. DEPLOY TO ECS
+      # Forces ECS to pull the new image we just pushed.
+      # ----------------------------------------------------------------
+      - name: Update ECS Service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment
+
+      # ----------------------------------------------------------------
+      # 4. STABILITY CHECK
+      # Pauses the pipeline until ECS confirms the new container is healthy.
+      # If the app crashes, this step will fail.
+      # ----------------------------------------------------------------
+      - name: Wait for Service Stability
+        run: |
+          echo "Waiting for ECS service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }}
+
+      # ----------------------------------------------------------------
+      # 5. LIVE TRAFFIC VERIFICATION
+      # We verify the actual public endpoints using Terraform Outputs.
+      # ----------------------------------------------------------------
+      
+      # Install Terraform on the runner
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_wrapper: false # Ensures we get raw string output
+
+      # Initialize Terraform (Connects to S3 State)
+      - name: Initialize Terraform State
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      # Check 1: Is the site accessible via HTTPS?
+      - name: Verify HTTPS & SSL
+        id: verify-https
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          URL=$(terraform output -raw health_check_url)
+          echo "Testing URL: $URL"
+          
+          # -s: Silent, -o: Ignore body, -w: Print only HTTP code
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ HTTPS Check Passed: HTTP $HTTP_CODE"
+          else
+            echo "❌ HTTPS Check Failed: Received HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+      # Check 2: Does HTTP redirect to HTTPS?
+      - name: Verify HTTP Redirect
+        id: verify-redirect
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          HTTPS_URL=$(terraform output -raw health_check_url)
+          # Replace 'https' with 'http'
+          HTTP_URL=$(echo $HTTPS_URL | sed 's/https/http/')
+          
+          echo "Testing Redirect for: $HTTP_URL"
+          
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HTTP_URL")
+          
+          if [ "$HTTP_CODE" -eq 301 ]; then
+             echo "✅ Redirect Check Passed: HTTP $HTTP_CODE"
+          else
+             echo "❌ Redirect Check Failed: Received HTTP $HTTP_CODE (Expected 301)"
+             exit 1
+          fi

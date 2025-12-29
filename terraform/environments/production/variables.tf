@@ -1,0 +1,9 @@
+variable "aws_region" {}
+variable "project_name" {}
+variable "environment" {}
+variable "container_port" {}
+variable "app_count" {}
+variable "fargate_cpu" {}
+variable "fargate_memory" {}
+variable "root_domain_name" {}
+variable "app_domain_name" {}

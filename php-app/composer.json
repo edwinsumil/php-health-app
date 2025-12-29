@@ -1,0 +1,5 @@
+{
+  "name": "app/php-health",
+  "description": "PHP container application",
+  "require": {}
+}
